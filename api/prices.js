@@ -1,32 +1,34 @@
+import * as cheerio from "cheerio"; // HTML parser
+
 export default async function handler(req, res) {
   try {
-    const endpoint = "https://pdqinfo.ca/data/priceHistory.json"; // PDQ public data file
-    const r = await fetch(endpoint);
-    const raw = await r.json();
+    const endpoint = "https://pdqinfo.ca/prices"; // main Manitoba prices page
+    const response = await fetch(endpoint);
+    const html = await response.text();
+    const $ = cheerio.load(html);
 
-    // PDQ returns an object, so grab the array inside
-    const records = raw?.prices || raw?.data || [];
-
-    // Filter to Manitoba & recent 7 days
-    const manitoba = records
-      .filter(item => item.province === "Manitoba")
-      .slice(-7)
-      .map(item => ({
-        date: item.date || item.tradeDate || item.reportDate,
-        wheat: item.wheat || null,
-        feedWheat: item.feed_wheat || null,
-        canola: item.canola || null,
-        rye: item.rye || null,
-        soybeans: item.soybeans || null,
-        peas: item.peas || null,
-        oats: item.oats || null,
-      }));
+    const data = [];
+    $("table tbody tr").each((_, row) => {
+      const cols = $(row).find("td").map((_, el) => $(el).text().trim()).get();
+      if (cols.length > 1) {
+        data.push({
+          location: cols[0],
+          wheat: cols[1],
+          feedWheat: cols[2],
+          canola: cols[3],
+          rye: cols[4],
+          soybeans: cols[5],
+          peas: cols[6],
+          oats: cols[7],
+        });
+      }
+    });
 
     res.setHeader("Cache-Control", "s-maxage=3600");
-    res.status(200).json(manitoba);
+    res.status(200).json(data.slice(0, 25)); // send top 25 rows
   } catch (err) {
     res
       .status(500)
-      .json({ error: "Failed to fetch Manitoba PDQ data", details: err.message });
+      .json({ error: "Failed to fetch PDQ HTML", details: err.message });
   }
-}
+            }
